@@ -1,0 +1,13 @@
+name: visnet
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10
+  - scipy
+  - numpy
+  - matplotlib
+  - ipywidgets
+  - ipympl=0.9.3
+  - pyyaml
+  - casadi
