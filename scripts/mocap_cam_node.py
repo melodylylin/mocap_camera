@@ -3,10 +3,6 @@ from lienp.SE3 import SE3
 from lienp.SO3 import SO3
 import os, cv2, json, yaml
 
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-from skspatial.objects import Line, LineSegment
-
 import rclpy
 from rclpy.node import Node
 from cv_bridge import CvBridge, CvBridgeError
