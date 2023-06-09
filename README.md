@@ -1,2 +1,2 @@
-# camera_calibration
-This repository collects packages and methods for camera calibration.
+# mocap_camera
+This repository is for camera extrinsically calibrated in the mocap volume
