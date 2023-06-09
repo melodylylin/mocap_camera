@@ -58,5 +58,17 @@ def generate_launch_description():
                 '--frame-id', f'{cam_name}', '--child-frame-id', f'{cam_name}/calibrated'
             ]
         ),
+
+        Node(
+            package='image_transport',
+            name=f'{cam_name}_image_transport',
+            executable='republish',
+            arguments=['raw', 'compressed'],
+            remappings=[
+                ('/in', f'{cam_name}/image_rect/projection'),
+                ('/out/compressed', f'{cam_name}/image_rect/projection/compressed'),
+                ],
+            parameters=[{'out.jpeg_quality': 15}]
+        )
     ])
 

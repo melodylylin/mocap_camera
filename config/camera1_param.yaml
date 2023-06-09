@@ -20,3 +20,4 @@
       exposure: 100
       autofocus: false
       focus: -1
+      .image_raw.jpeg_quality: 15
