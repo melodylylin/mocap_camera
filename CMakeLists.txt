@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-project(visnet_calib)
+project(mocap_camera)
 
 # Default to C99
 if(NOT CMAKE_C_STANDARD)
@@ -29,6 +29,12 @@ install(DIRECTORY
   camera_info
   DESTINATION share/${PROJECT_NAME}
 )
+
+install(PROGRAMS
+  scripts/mocap_cam_node.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)

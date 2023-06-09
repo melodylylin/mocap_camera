@@ -17,7 +17,7 @@ import json
 calib_info_dir = get_package_share_directory('visnet_calib') + '/camera_info'
 
 ########################
-cam_name = "camera0"
+cam_name = "camera2"
 ########################
 R_cv = np.array([
     [ 0,  0,  1],
@@ -36,24 +36,17 @@ params_path = f"{get_package_share_directory('mocap_camera')}/config/{cam_name}_
 
 def generate_launch_description():
     return LaunchDescription([
+        # SetEnvironmentVariable(name='GSCAM_CONFIG', value="v4l2src device=/dev/video0 ! image/jpeg,width=1600,height=1200,framerate=30/1 ! jpegdec ! videoconvert"),
+        DeclareLaunchArgument(
+            'camera_calibration_file',
+            default_value='file://' + get_package_share_directory('visnet_calib') + '/camera_info/camera0.yaml'),
+            
         Node(
             package='usb_cam',
             name=f'{cam_name}_node',
             executable='usb_cam_node_exe',
             namespace=f'{cam_name}',
             parameters=[params_path],
-        ),
-
-        Node(
-           package='rviz2',
-           executable='rviz2',
-           arguments=['-d', get_package_share_directory('mocap_camera') + '/config/camera_calib.rviz']
-        ),
-
-        Node(
-            package='tf2_ros',
-            executable='static_transform_publisher',
-            arguments=['--frame-id', 'map', '--child-frame-id', 'qualisys']
         ),
 
         Node(
@@ -65,32 +58,5 @@ def generate_launch_description():
                 '--frame-id', f'{cam_name}', '--child-frame-id', f'{cam_name}/calibrated'
             ]
         ),
-
-        Node(
-            package='qualisys_mocap',
-            executable='qualisys_node',
-            parameters=[
-                {'server': '192.168.123.2'},
-            ]
-        )
-        
-        ###################################################
-        #### uncomment the block blew to record rosbag ####
-        ###################################################
-        # launch.actions.ExecuteProcess(
-        #     cmd=['ros2', 'bag', 'record',
-        #         '-o', f'rosbags/multicam-{date_str}',
-        #         '/camera0/image_raw/compressed',
-        #         '/camera1/image_raw/compressed',
-        #         '/camera2/image_raw/compressed',
-        #         '/camera3/image_raw/compressed',
-        #         '/camera0/pose',
-        #         '/camera1/pose',
-        #         '/camera2/pose',
-        #         '/camera3/pose',
-        #         '/drone1/pose',
-        #         ],
-        #     output='screen'
-        # )
     ])
 

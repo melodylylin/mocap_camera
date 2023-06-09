@@ -98,7 +98,7 @@ class MocapCam(Node):
 
         self.img_sub_ = self.create_subscription(
             Image,
-            f"{cam_name}/image",
+            f"{cam_name}/image_raw",
             self.image_cb,
             10,
         )
