@@ -36,11 +36,6 @@ params_path = f"{get_package_share_directory('mocap_camera')}/config/{cam_name}_
 
 def generate_launch_description():
     return LaunchDescription([
-        # SetEnvironmentVariable(name='GSCAM_CONFIG', value="v4l2src device=/dev/video0 ! image/jpeg,width=1600,height=1200,framerate=30/1 ! jpegdec ! videoconvert"),
-        DeclareLaunchArgument(
-            'camera_calibration_file',
-            default_value='file://' + get_package_share_directory('visnet_calib') + '/camera_info/camera0.yaml'),
-            
         Node(
             package='usb_cam',
             name=f'{cam_name}_node',
