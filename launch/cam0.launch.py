@@ -14,7 +14,7 @@ from lienp.SO3 import SO3
 import numpy as np
 import json
 
-calib_info_dir = get_package_share_directory('visnet_calib') + '/camera_info'
+calib_info_dir = get_package_share_directory('mocap_camera') + '/camera_info'
 
 ########################
 cam_name = "camera0"
