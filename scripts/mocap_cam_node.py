@@ -10,6 +10,8 @@ from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image, CompressedImage
 from geometry_msgs.msg import PoseStamped, TransformStamped
 from visualization_msgs.msg import Marker
+from vision_msgs.msg import BoundingBox2D
+
 from tf2_ros import TransformException
 from tf2_ros.transform_listener import TransformListener
 from tf2_ros.buffer import Buffer
@@ -37,7 +39,7 @@ class MocapCam(Node):
         self.target_name = self.get_parameter('target_name').get_parameter_value().string_value
         info_dir = self.get_parameter('info_dir').get_parameter_value().string_value
         
-        self.target_size = np.array([0.4, 0.4, 0.25])
+        self.target_size = np.array([0.3, 0.3, 0.20])
         self.target_3dbox = get_3dbox(self.target_size)
 
         with open(f'{info_dir}/{self.cam_name}.yaml', 'r') as fs:
@@ -121,6 +123,12 @@ class MocapCam(Node):
             f"{self.cam_name}/image_rect/projection",
             10
         )
+
+        self.bbox_pub_ = self.create_publisher(
+            BoundingBox2D,
+            f"{self.cam_name}/bbox",
+            10
+        )
     
     def cam_mocap_pose_cb(self, msg: PoseStamped):
         pos = msg.pose.position
@@ -191,9 +199,15 @@ class MocapCam(Node):
             #     img_proj = cv2.circle(img_proj, p.astype(int), 5, (0,255,0), 1)
             # cv2.imshow("camera view", img_proj)
 
+            pix_h = self.K_t @ self.T_cam.M @ obj_h
+            pix = pix_h[0:-1]/pix_h[-1]
+            box_msg = BoundingBox2D()
+            box_msg.center.position.x = pix[0]
+            box_msg.center.position.y = pix[1]
+            box_msg.size_x = 20.
+            box_msg.size_y = 20.
+            self.bbox_pub_.publish(box_msg)
             img_rect = cv2.undistort(img, self.K.reshape(3,3), self.cam_dist, None, newCameraMatrix=self.K_opt)
-            # pix_h = self.K_t @ self.T_cam.M @ obj_h
-            # pix = pix_h[0:-1]/pix_h[-1]
             # img_rect = cv2.circle(img_rect, pix.astype(int), 50, (255,0,0), 1)
 
             pix_h = self.K_t @ self.T_cam.M @ markers_h
@@ -210,6 +224,8 @@ class MocapCam(Node):
             img_msg.header.frame_id = msg.header.frame_id
             img_msg.header.stamp = msg.header.stamp
             self.img_pub_.publish(img_msg)
+            
+            
 
         keyboard = cv2.waitKey(1)
         if keyboard == ord('q') or keyboard == 27:
