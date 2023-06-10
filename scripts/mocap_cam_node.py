@@ -217,7 +217,6 @@ class MocapCam(Node):
 
             box = cv2.boundingRect(pix.astype(int))
             cv2.rectangle(img_rect, box, 255, 2)
-            cv2.imshow("rectified", img_rect)
             
             img_rect = cv2.resize(img_rect, (800,600))
             img_msg = self.bridge.cv2_to_imgmsg(img_rect, encoding='mono8')
@@ -225,11 +224,10 @@ class MocapCam(Node):
             img_msg.header.stamp = msg.header.stamp
             self.img_pub_.publish(img_msg)
             
-            
-
-        keyboard = cv2.waitKey(1)
-        if keyboard == ord('q') or keyboard == 27:
-            exit(0)
+            # cv2.imshow("rectified", img_rect)
+        # keyboard = cv2.waitKey(1)
+        # if keyboard == ord('q') or keyboard == 27:
+        #     exit(0)
 
     def project_points(self, obj_points):
         # object points should be (N,3) or (3,)
