@@ -1,6 +1,7 @@
+#!/usr/bin/env python3
 import numpy as np
 from lienp.SE3 import SE3
-from lienp.SO3 import SO3
+from lienp.SO3 import SO3, so3
 import os, cv2, json, yaml
 
 import rclpy
@@ -19,21 +20,27 @@ def get_3dbox(box_dim):
     for ix in vtx:
         for iy in vtx:
             for iz in vtx:
-
                 box.append(np.array([ix, iy, iz]) * box_dim/2)
     box = np.array(box)
     return box
 
 class MocapCam(Node):
-    def __init__(self, cam_name, info_dir=None, target_name=None):
+    def __init__(self, info_dir=None):
         super().__init__("MoCap_camera")
         self.bridge = CvBridge()
-        self.cam_name = cam_name
-        self.target_name = target_name
-        self.target_size = np.array([0.3, 0.3, 0.2])
+       
+        self.declare_parameter('camera_name', 'camera0')
+        self.declare_parameter('target_name', 'drone1')
+        self.declare_parameter('info_dir', '~/.ros/camera_info')
+
+        self.cam_name = self.get_parameter('camera_name').get_parameter_value().string_value
+        self.target_name = self.get_parameter('target_name').get_parameter_value().string_value
+        info_dir = self.get_parameter('info_dir').get_parameter_value().string_value
+        
+        self.target_size = np.array([0.4, 0.4, 0.25])
         self.target_3dbox = get_3dbox(self.target_size)
 
-        with open(f'{info_dir}/{cam_name}.yaml', 'r') as fs:
+        with open(f'{info_dir}/{self.cam_name}.yaml', 'r') as fs:
             cam_info = yaml.safe_load(fs)
         if cam_info is not None:
             self.K = np.array(cam_info["camera_matrix"]["data"])
@@ -57,7 +64,7 @@ class MocapCam(Node):
                 [K_, np.zeros((3,1))],
                 ])
         
-        with open(f"{info_dir}/{cam_name}_mocap_calib.json") as fs:
+        with open(f"{info_dir}/{self.cam_name}_mocap_calib.json") as fs:
             calib_info = json.load(fs)
             self.R_rel = np.array(calib_info['R'])
             self.c_rel = np.array(calib_info['c'])
@@ -69,49 +76,49 @@ class MocapCam(Node):
         self.T_mocap = SE3(np.zeros(6))
         self.T_cam = None
 
-        self.tf_buffer_ = Buffer()
-        self.tf_listener_ = TransformListener(self.tf_buffer_, self)
+        # self.tf_buffer_ = Buffer()
+        # self.tf_listener_ = TransformListener(self.tf_buffer_, self)
 
         self.cam_mocap_pose_sub_ = self.create_subscription(
             PoseStamped,
-            f"{cam_name}/pose",
+            f"{self.cam_name}/pose",
             self.cam_mocap_pose_cb,
             10,
         )
 
-        if target_name is not None:
+        if self.target_name is not None:
             self.target_pose = PoseStamped()
             self.target_markers = Marker()
             self.target_mocap_pose_sub_ = self.create_subscription(
                 PoseStamped,
-                f"{target_name}/pose",
+                f"{self.target_name}/pose",
                 self.target_mocap_pose_cb,
                 10
             )
 
             self.target_marker_sub_ = self.create_subscription(
                 Marker,
-                f"{target_name}/markers",
+                f"{self.target_name}/markers",
                 self.target_marker_cb,
                 10
             )
 
         self.img_sub_ = self.create_subscription(
             Image,
-            f"{cam_name}/image_raw",
+            f"{self.cam_name}/image_raw",
             self.image_cb,
             10,
         )
 
         self.cam_pose_pub_ = self.create_publisher(
             PoseStamped,
-            f"{cam_name}/pose/calibrated",
+            f"{self.cam_name}/pose/calibrated",
             10
         )
 
         self.img_pub_ = self.create_publisher(
-            CompressedImage,
-            f"{cam_name}/image_rect/projection",
+            Image,
+            f"{self.cam_name}/image_rect/projection",
             10
         )
     
@@ -124,25 +131,25 @@ class MocapCam(Node):
         self.T_mocap = SE3(R=R, c=c)
         self.T_cam = self.T_rel @ self.T_mocap
 
-        try:
-            stamp = msg.header.stamp
-            lookup_time_ = rclpy.time.Time.from_msg(stamp) - self.delay
-            # t = self.tf_buffer_.lookup_transform(
-            #     'map', 
-            #     f'{self.cam_name}/calibrated',
-            #     lookup_time_)
-            # c = np.array([t.transform.translation.x, t.transform.translation.y, t.transform.translation.z])
-            # q = np.array([t.transform.rotation.w, t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z])
-            # R = SO3.from_quat(q).T
-            # self.T_cam = SE3(R=R, c=c)
+        # try:
+        #     stamp = msg.header.stamp
+        #     lookup_time_ = rclpy.time.Time.from_msg(stamp) - self.delay
+        #     t = self.tf_buffer_.lookup_transform(
+        #         'map', 
+        #         f'{self.cam_name}/calibrated',
+        #         lookup_time_)
+        #     c = np.array([t.transform.translation.x, t.transform.translation.y, t.transform.translation.z])
+        #     q = np.array([t.transform.rotation.w, t.transform.rotation.x, t.transform.rotation.y, t.transform.rotation.z])
+        #     R = SO3.from_quat(q).T
+        #     self.T_cam = SE3(R=R, c=c)
 
-        except ValueError as e:
-            self.get_logger().info(f"{e}")
+        # except ValueError as e:
+        #     self.get_logger().info(f"{e}")
 
-        except TransformException as ex:
-            self.get_logger().info(
-                        f'Could not transform map to {self.cam_name}/calibrated: {ex}')
-            return
+        # except TransformException as ex:
+        #     self.get_logger().info(
+        #                 f'Could not transform map to {self.cam_name}/calibrated: {ex}')
+        #     return
 
     def target_mocap_pose_cb(self, msg: PoseStamped):
         self.target_pose = msg
@@ -158,8 +165,9 @@ class MocapCam(Node):
         self.target_markers = msg
 
     def image_cb(self, msg):
-        img = self.bridge.imgmsg_to_cv2(msg, 'bgr8')
-        img_rect = cv2.undistort(img, self.K.reshape(3,3), self.cam_dist, None, newCameraMatrix=self.K_opt)
+        img = self.bridge.imgmsg_to_cv2(msg, 'mono8')
+        # img_proj = img.copy()
+    
         ox = self.target_pose.pose.position.x
         oy = self.target_pose.pose.position.y
         oz = self.target_pose.pose.position.z
@@ -172,35 +180,61 @@ class MocapCam(Node):
         
         markers_h = T_obj.inv @ np.hstack([self.target_3dbox, np.ones((8,1))]).T
         # markers = np.array([[p.x, p.y, p.z] for p in self.target_markers.points])
-        # markers_h = np.hstack([markers, np.ones((markers.shape[0],1))])
+        # markers_h = np.hstack([markers, np.ones((markers.shape[0],1))]).T
+        
         if self.T_cam is not None:
-            pix_h = self.K_t @ self.T_cam.M @ obj_h
-            pix = pix_h[0:-1]/pix_h[-1]
-            img_rect = cv2.circle(img_rect, pix.astype(int), 50, (255,0,0), 2)
+
+            # img_pts = self.project_points(markers_h[0:3,:])
+            # self.get_logger().info(f"{img_pts.shape}")
+            # for p in img_pts:
+            #     self.get_logger().info(f"{p}")
+            #     img_proj = cv2.circle(img_proj, p.astype(int), 5, (0,255,0), 1)
+            # cv2.imshow("camera view", img_proj)
+
+            img_rect = cv2.undistort(img, self.K.reshape(3,3), self.cam_dist, None, newCameraMatrix=self.K_opt)
+            # pix_h = self.K_t @ self.T_cam.M @ obj_h
+            # pix = pix_h[0:-1]/pix_h[-1]
+            # img_rect = cv2.circle(img_rect, pix.astype(int), 50, (255,0,0), 1)
 
             pix_h = self.K_t @ self.T_cam.M @ markers_h
             pix = (pix_h[0:2,:] / pix_h[-1,:]).T
             for p in pix:
-                img_rect = cv2.circle(img_rect, p.astype(int), 5, (0,255,0), 1)
-            # self.get_logger().info(f"pix: {pix}\n")
+                img_rect = cv2.circle(img_rect, p.astype(int), 3, (255,0,0), -1)
 
-            # img_msg = self.bridge.cv2_to_imgmsg(img_rect, encoding='bgr8')
-            img_msg = self.bridge.cv2_to_compressed_imgmsg(img_rect)
+            box = cv2.boundingRect(pix.astype(int))
+            cv2.rectangle(img_rect, box, 255, 2)
+            cv2.imshow("rectified", img_rect)
+            
+            img_rect = cv2.resize(img_rect, (800,600))
+            img_msg = self.bridge.cv2_to_imgmsg(img_rect, encoding='mono8')
             img_msg.header.frame_id = msg.header.frame_id
-            img_msg.header.stamp = self.get_clock().now().to_msg()                  
+            img_msg.header.stamp = msg.header.stamp
             self.img_pub_.publish(img_msg)
 
-            # cv2.imshow("camera view", img_rect)
-            # keyboard = cv2.waitKey(1)
-            # if keyboard == ord('q') or keyboard == 27:
-            #     exit(0)
+        keyboard = cv2.waitKey(1)
+        if keyboard == ord('q') or keyboard == 27:
+            exit(0)
+
+    def project_points(self, obj_points):
+        # object points should be (N,3) or (3,)
+        rvec, tvec = to_cvframe(self.T_cam)
+        img_pts, _ = cv2.projectPoints(obj_points, rvec, tvec, self.K.reshape(3,3), self.cam_dist)
+        return np.squeeze(img_pts)
+
+def to_cvframe(T):
+    R_cv = np.array([
+        [ 0,  0,  1],
+        [-1,  0,  0],
+        [ 0, -1,  0]
+    ])
+    rvec = so3.log(R_cv.T @ T.R)
+    tvec = R_cv.T @ -T.R @ T.c
+    return rvec, tvec
 
 def main(args=None):
-    rclpy.init()
-    cam_name = 'camera0'
-    info_dir = os.path.abspath( os.path.join(os.path.dirname(''), os.pardir)) + "/camera_info/"   
+    rclpy.init(args=args)
     
-    node = MocapCam(cam_name=cam_name, info_dir=info_dir, target_name='drone1')
+    node = MocapCam()
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

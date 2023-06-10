@@ -55,6 +55,17 @@ def generate_launch_description():
         ),
 
         Node(
+            package='mocap_camera',
+            name=f'mocap_{cam_name}_node',
+            executable='mocap_cam_node.py',
+            parameters=[
+                {'camera_name': cam_name},
+                {'target_name': 'drone1'},
+                {'info_dir': calib_info_dir},
+            ],
+        ),
+
+        Node(
             package='image_transport',
             name=f'{cam_name}_image_transport',
             executable='republish',

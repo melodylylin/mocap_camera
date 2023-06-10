@@ -25,7 +25,7 @@ class CharucoDataNode(Node):
         
         self.image_sub_ = self.create_subscription(
             Image,
-            '/camera0/image',
+            '/camera0/image_raw',
             self.image_callback,
             10
         )
