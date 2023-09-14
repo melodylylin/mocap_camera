@@ -10,41 +10,33 @@ from ament_index_python.packages import get_package_share_directory
 
 from datetime import date, datetime
 date_str = f"{date.today().strftime('%Y-%m-%d')}-{datetime.now().time().strftime('%I%M%S')}"
+from lienp.SO3 import SO3
+import numpy as np
+import json
 
-def cam_remap(i):
-    return[
-        (f'/camera{i}/camera/camera_info', f'/camera{i}/camera_info'),
-        (f'/camera{i}/camera/image_raw', f'/camera{i}/image'),
-        (f'/camera{i}/camera/image_raw/compressed', f'/camera{i}/image/compressed'),
-        (f'/camera{i}/camera/image_raw/compressedDepth', f'/camera{i}/image/compressedDepth'),
-        (f'/camera{i}/camera/image_raw/theora', f'/camera{i}/image/theora'),
-    ]
+calib_info_dir = get_package_share_directory('mocap_camera') + '/camera_info'
+
+########################
+cam_name = "camera0"
+########################
+
+
+params_path = f"{get_package_share_directory('mocap_camera')}/config/{cam_name}_param.yaml"
 
 def generate_launch_description():
     return LaunchDescription([
-        # SetEnvironmentVariable(name='GSCAM_CONFIG', value="v4l2src device=/dev/video0 ! image/jpeg,width=1600,height=1200,framerate=30/1 ! jpegdec ! videoconvert"),
-        DeclareLaunchArgument(
-            'camera_calibration_file',
-            default_value='file://' + get_package_share_directory('visnet_calib') + '/camera_info/camera0.yaml'),
-            
         Node(
-            package='gscam',
-            executable='gscam_node',
-            namespace='camera0',
-            parameters=[
-                {'gscam_config': 'v4l2src device=/dev/video0 ! image/jpeg,width=1600,height=1200,framerate=30/1 ! jpegdec ! videoconvert'},
-                {'camera_info_url': 'package://visnet_calib/config/camera0.yaml'},
-                {'frame_id': 'camera0'},
-                {'sync_sink': False},
-                {'use_gst_timestamps': True},
-            ],
-            remappings=cam_remap(0)
+            package='usb_cam',
+            name=f'{cam_name}_node',
+            executable='usb_cam_node_exe',
+            namespace=f'{cam_name}',
+            parameters=[params_path],
         ),
 
         Node(
            package='rviz2',
            executable='rviz2',
-           arguments=['-d', get_package_share_directory('visnet_calib') + '/config/camera_calib.rviz']
+           arguments=['-d', get_package_share_directory('mocap_camera') + '/config/camera_calib.rviz']
         ),
 
         Node(
@@ -67,15 +59,15 @@ def generate_launch_description():
         # launch.actions.ExecuteProcess(
         #     cmd=['ros2', 'bag', 'record',
         #         '-o', f'rosbags/multicam-{date_str}',
-        #         '/camera_0/image/compressed',
-        #         '/camera_1/image/compressed',
-        #         '/camera_2/image/compressed',
-        #         '/camera_3/image/compressed',
-        #         '/camera_0/pose',
-        #         '/camera_1/pose',
-        #         '/camera_2/pose',
-        #         '/camera_3/pose',
-        #         '/uae05/pose',
+        #         '/camera0/image_raw/compressed',
+        #         '/camera1/image_raw/compressed',
+        #         '/camera2/image_raw/compressed',
+        #         '/camera3/image_raw/compressed',
+        #         '/camera0/pose',
+        #         '/camera1/pose',
+        #         '/camera2/pose',
+        #         '/camera3/pose',
+        #         '/drone1/pose',
         #         ],
         #     output='screen'
         # )

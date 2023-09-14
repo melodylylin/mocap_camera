@@ -19,15 +19,9 @@ calib_info_dir = get_package_share_directory('mocap_camera') + '/camera_info'
 ########################
 cam_name = "camera2"
 ########################
-R_cv = np.array([
-    [ 0,  0,  1],
-    [-1,  0,  0],
-    [ 0, -1,  0]
-])
 with open(f"{calib_info_dir}/{cam_name}_mocap_calib.json") as fs:
     calib_info = json.load(fs)
     R = np.array(calib_info['R'])
-    R = R_cv @ R
     c = np.array(calib_info['c'])
     q = SO3.to_quat(R)
     print(c, q)
@@ -77,4 +71,3 @@ def generate_launch_description():
             parameters=[{'out.jpeg_quality': 15}]
         )
     ])
-

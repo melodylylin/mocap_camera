@@ -16,6 +16,9 @@ from tf2_ros import TransformException
 from tf2_ros.transform_listener import TransformListener
 from tf2_ros.buffer import Buffer
 
+from pathlib import Path
+homedir = Path.home()
+
 def get_3dbox(box_dim):
     vtx = (-1,1)
     box = []
@@ -31,9 +34,9 @@ class MocapCam(Node):
         super().__init__("MoCap_camera")
         self.bridge = CvBridge()
        
-        self.declare_parameter('camera_name', 'camera0')
-        self.declare_parameter('target_name', 'drone1')
-        self.declare_parameter('info_dir', '~/.ros/camera_info')
+        self.declare_parameter('camera_name', 'camera3')
+        self.declare_parameter('target_name', 'drone')
+        self.declare_parameter('info_dir', f'{homedir}/.ros/camera_info')
 
         self.cam_name = self.get_parameter('camera_name').get_parameter_value().string_value
         self.target_name = self.get_parameter('target_name').get_parameter_value().string_value
@@ -48,23 +51,6 @@ class MocapCam(Node):
             self.K = np.array(cam_info["camera_matrix"]["data"])
             self.cam_dist = np.array(cam_info["distortion_coefficients"]["data"])
             self.K_opt, dist_valid_roi = cv2.getOptimalNewCameraMatrix(self.K.reshape(3,3), self.cam_dist, (1600,1200), 1, (1600, 1200))
-            R_model2cam = np.array([
-                [0, 1, 0],
-                [0, 0, 1],
-                [1, 0, 0],        
-            ])
-
-            # SE2, transform image coordiantes to match the book
-            SE2_pix2image = np.array([
-                [-1, 0,  1600],
-                [0, -1, 1200],
-                [0, 0,  1],
-            ])
-            K_ = SE2_pix2image @ self.K_opt @ R_model2cam
-
-            self.K_t = np.block([
-                [K_, np.zeros((3,1))],
-                ])
         
         with open(f"{info_dir}/{self.cam_name}_mocap_calib.json") as fs:
             calib_info = json.load(fs)
@@ -83,7 +69,7 @@ class MocapCam(Node):
 
         self.cam_mocap_pose_sub_ = self.create_subscription(
             PoseStamped,
-            f"{self.cam_name}/pose",
+            f"/{self.cam_name}/pose",
             self.cam_mocap_pose_cb,
             10,
         )
@@ -93,14 +79,14 @@ class MocapCam(Node):
             self.target_markers = Marker()
             self.target_mocap_pose_sub_ = self.create_subscription(
                 PoseStamped,
-                f"{self.target_name}/pose",
+                f"/{self.target_name}/pose",
                 self.target_mocap_pose_cb,
                 10
             )
 
             self.target_marker_sub_ = self.create_subscription(
                 Marker,
-                f"{self.target_name}/markers",
+                f"/{self.target_name}/markers",
                 self.target_marker_cb,
                 10
             )
@@ -179,28 +165,23 @@ class MocapCam(Node):
         ox = self.target_pose.pose.position.x
         oy = self.target_pose.pose.position.y
         oz = self.target_pose.pose.position.z
-        obj_h = np.array([ox, oy, oz, 1])
+        obj_pt = np.array([ox, oy, oz])
         oqw = self.target_pose.pose.orientation.w
         oqx = self.target_pose.pose.orientation.x
         oqy = self.target_pose.pose.orientation.y
         oqz = self.target_pose.pose.orientation.z
-        T_obj = SE3(R=SO3.from_quat(np.array([oqw,oqx,oqy,oqz])).T, c=np.array([ox,oy,oz]))
+        T_obj = SE3(R=SO3.from_quat(np.array([oqw,oqx,oqy,oqz])).T, c=obj_pt)
         
         markers_h = T_obj.inv @ np.hstack([self.target_3dbox, np.ones((8,1))]).T
         # markers = np.array([[p.x, p.y, p.z] for p in self.target_markers.points])
         # markers_h = np.hstack([markers, np.ones((markers.shape[0],1))]).T
-        
+
         if self.T_cam is not None:
+            # bounding box projection
+            rvec, tvec = get_rtvec(self.T_cam)
+            pix, _ = cv2.projectPoints(np.expand_dims(obj_pt, axis=0), rvec, tvec, self.K_opt, np.array([]))
+            pix = np.squeeze(pix)
 
-            # img_pts = self.project_points(markers_h[0:3,:])
-            # self.get_logger().info(f"{img_pts.shape}")
-            # for p in img_pts:
-            #     self.get_logger().info(f"{p}")
-            #     img_proj = cv2.circle(img_proj, p.astype(int), 5, (0,255,0), 1)
-            # cv2.imshow("camera view", img_proj)
-
-            pix_h = self.K_t @ self.T_cam.M @ obj_h
-            pix = pix_h[0:-1]/pix_h[-1]
             box_msg = BoundingBox2D()
             box_msg.center.position.x = pix[0]
             box_msg.center.position.y = pix[1]
@@ -210,15 +191,15 @@ class MocapCam(Node):
             img_rect = cv2.undistort(img, self.K.reshape(3,3), self.cam_dist, None, newCameraMatrix=self.K_opt)
             # img_rect = cv2.circle(img_rect, pix.astype(int), 50, (255,0,0), 1)
 
-            pix_h = self.K_t @ self.T_cam.M @ markers_h
-            pix = (pix_h[0:2,:] / pix_h[-1,:]).T
+            pix, _ = cv2.projectPoints(markers_h[0:3,:].T, rvec, tvec, self.K_opt, np.array([]))
+            pix = np.squeeze(pix)
             for p in pix:
                 img_rect = cv2.circle(img_rect, p.astype(int), 3, (255,0,0), -1)
 
             box = cv2.boundingRect(pix.astype(int))
             cv2.rectangle(img_rect, box, 255, 2)
-            
-            img_rect = cv2.resize(img_rect, (800,600))
+
+            img_rect = cv2.resize(img_rect, (800,600)) # reduce pic size to use less bandwidth when streaming
             img_msg = self.bridge.cv2_to_imgmsg(img_rect, encoding='mono8')
             img_msg.header.frame_id = msg.header.frame_id
             img_msg.header.stamp = msg.header.stamp
@@ -229,21 +210,20 @@ class MocapCam(Node):
         # if keyboard == ord('q') or keyboard == 27:
         #     exit(0)
 
-    def project_points(self, obj_points):
-        # object points should be (N,3) or (3,)
-        rvec, tvec = to_cvframe(self.T_cam)
-        img_pts, _ = cv2.projectPoints(obj_points, rvec, tvec, self.K.reshape(3,3), self.cam_dist)
-        return np.squeeze(img_pts)
-
-def to_cvframe(T):
-    R_cv = np.array([
-        [ 0,  0,  1],
-        [-1,  0,  0],
-        [ 0, -1,  0]
-    ])
-    rvec = so3.log(R_cv.T @ T.R)
-    tvec = R_cv.T @ -T.R @ T.c
+def get_rtvec(T):
+    rvec = so3.log(T.R)
+    tvec = T.t
     return rvec, tvec
+
+def project_points(obj_pts, T, K_opt):
+    """
+    T is expressed in OpenCV convention
+    """
+    obj_pts_h = np.hstack([obj_pts, np.ones((obj_pts.shape[0],1))])
+    obj_pts_fcam = T.M @ obj_pts_h.T
+    obj_pts_fcam = obj_pts_fcam[0:3,:] / obj_pts_fcam[2,:]
+    pix_pts = K_opt @ obj_pts_fcam
+    return pix_pts[0:2,:]
 
 def main(args=None):
     rclpy.init(args=args)

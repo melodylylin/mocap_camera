@@ -110,9 +110,34 @@ def solve_lpnp(image_points, object_points, K_opt):
         B = get_B(Vzdot_list)
         ep = -np.linalg.inv(B) @ A
         T_op = SE3.exp(ep) @ T_op
+    print(f"Optimization error: {np.squeeze(ep)}")
 
     return T_op, ep
-    #     print(f"error: {np.squeeze(ep)}")
-    # print(f"True: {pose_true}")
-    # print(f"Estimated: {T_op.get_param()}")
-    # print(f"Absolute error: {T_op.get_param()- pose_true}")
+
+def solve_lpnp_new(image_points, object_points, K_opt):
+    """
+    Returns optimal transformation of the camera pose and residual
+    image_points: (N,2)
+    object_points: (N,3)
+    """
+    assert image_points.shape[0] >= 4 and image_points.shape[1] == 2
+    assert object_points.shape[0] >= 4 and object_points.shape[1] == 3
+    assert image_points.shape[0] == object_points.shape[0]
+    n_pairs = image_points.shape[0]
+
+    image_points = np.hstack([image_points, np.ones((n_pairs,1))])
+    object_points = np.hstack([object_points, np.ones((n_pairs,1))]).T
+    K_inv = np.linalg.inv(K_opt)
+    V_list = [get_V(K_inv, p) for p in image_points]
+
+    T_op = SE3(param=np.zeros(6))
+    for i in range(10):
+        z = T_op @ object_points
+        Vz_list, Vzdot_list = get_Vz_list(V_list, z)
+        A = get_A(Vz_list, Vzdot_list)
+        B = get_B(Vzdot_list)
+        ep = -np.linalg.inv(B) @ A
+        T_op = SE3.exp(ep) @ T_op
+    print(f"Optimization error: {np.squeeze(ep)}")
+
+    return T_op, ep
